@@ -1,0 +1,18 @@
+[package]
+name = "cm-game-auth"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+base64 = "0.22.1"
+chrono = { version = "0.4.38", features = ["serde"] }
+rand = "0.9.1"
+reqwest = { version = "0.12.8", features = ["json"] }
+rocket_db_pools = { version = "0.2.0", features = ["sqlx_mysql"] }
+serde = "1.0.210"
+serde_json = "1.0.132"
+sqlx = { version = "0.7", features = ["mysql", "runtime-async-std", "chrono"] }
+
+[dependencies.rocket]
+version = "0.5.1"
+features = ["json"]

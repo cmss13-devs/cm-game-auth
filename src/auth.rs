@@ -7,8 +7,8 @@ use sqlx::query;
 
 use crate::{Cmdb, Config};
 
-#[get("/authenticate?<token>")]
-pub async fn authenticate(token: &str, config: &State<Config>) -> Redirect {
+#[get("/authenticate?<code>")]
+pub async fn authenticate(code: &str, config: &State<Config>) -> Redirect {
     let oauth_config = config.oauth.as_ref().unwrap();
 
     let nonce: String = rand::rng()
@@ -17,7 +17,7 @@ pub async fn authenticate(token: &str, config: &State<Config>) -> Redirect {
         .map(char::from)
         .collect();
 
-    Redirect::found(format!("{}?scope=openid%20profile&response_type=code&client_id={}&redirect_uri={}/forums/callback&nonce={}&state={}", &oauth_config.auth_endpoint, &oauth_config.client_id, &config.base_url, &nonce, token))
+    Redirect::found(format!("{}?scope=openid%20profile&response_type=code&client_id={}&redirect_uri={}/forums/callback&nonce={}&state={}", &oauth_config.auth_endpoint, &oauth_config.client_id, &config.base_url, &nonce, code))
 }
 
 #[derive(Deserialize)]

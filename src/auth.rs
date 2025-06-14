@@ -98,6 +98,11 @@ pub async fn callback(
         return String::from("Could not decode user from response.");
     };
 
+    let decoded_user = match BASE64_STANDARD.decode(user) {
+        Ok(user) => user,
+        Err(error) => return format!("Could not decode user from response: {}", error),
+    };
+
     let Ok(parsed_user) = String::from_utf8(decoded_user) else {
         return String::from("An error occured");
     };

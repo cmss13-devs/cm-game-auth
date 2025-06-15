@@ -42,9 +42,15 @@ impl Fairing for CORS {
 }
 
 #[derive(Debug, Deserialize, Serialize)]
-struct OAuthConfig {
+struct ForumsOAuthConfig {
     auth_endpoint: String,
     token_endpoint: String,
+    client_id: String,
+    client_secret: String,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct DiscordOAuthConfig {
     client_id: String,
     client_secret: String,
 }
@@ -53,7 +59,8 @@ struct OAuthConfig {
 #[serde(crate = "rocket::serde")]
 #[derive(Default)]
 struct Config {
-    oauth: Option<OAuthConfig>,
+    forums: Option<ForumsOAuthConfig>,
+    discord: Option<DiscordOAuthConfig>,
     base_url: String
 }
 
@@ -82,6 +89,10 @@ fn rocket() -> _ {
         .attach(CORS)
         .mount(
             format!("{}/forums", base_url),
-            routes![auth::authenticate, auth::callback],
+            routes![auth::forums_authenticate, auth::forums_callback],
+        )
+        .mount(
+            format!("{}/discord", base_url),
+            routes![auth::discord_authenticate, auth::discord_callback],
         )
 }

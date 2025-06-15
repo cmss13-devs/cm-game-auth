@@ -1,4 +1,4 @@
-use base64::{prelude::BASE64_STANDARD, Engine};
+use base64::{prelude::BASE64_STANDARD_NO_PAD, Engine};
 use rand::{distr::Alphanumeric, Rng};
 use rocket::{response::Redirect, State};
 use rocket_db_pools::Connection;
@@ -94,7 +94,7 @@ pub async fn callback(
         return String::from("Could not retrieve user from response.");
     };
 
-    let Ok(decoded_user) = BASE64_STANDARD.decode(user) else {
+    let Ok(decoded_user) = BASE64_STANDARD_NO_PAD.decode(user) else {
         return String::from("Could not decode user from response.");
     };
 

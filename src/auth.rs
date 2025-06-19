@@ -104,7 +104,7 @@ pub async fn forums_callback(
         Err(error) => return error,
     };
 
-    let Ok(query) = query("UPDATE authentication_requests SET approved = 1, external_username = ? WHERE access_code = ?").bind(user.sub).bind(state).execute(&mut **db).await else {
+    let Ok(query) = query(r#"UPDATE authentication_requests SET approved = 1, external_username = ?, authentication_method = "forums" WHERE access_code = ?"#).bind(user.sub).bind(state).execute(&mut **db).await else {
         return String::from("An error occured interfacing with the database.")
     };
 
@@ -159,8 +159,6 @@ pub async fn discord_callback(
         Err(error) => return format!("Unable to parse response: {}", error),
     };
 
-
-
     let user = match get_user_from_jwt(&json.id_token) {
         Ok(user) => user,
         Err(error) => return error,
@@ -172,7 +170,7 @@ pub async fn discord_callback(
         return String::from("In order to use Discord authentication, you must have previously linked your CKEY in game.")
     };
 
-    let Ok(query) = query("UPDATE authentication_requests SET approved = 1, internal_user_id = ? WHERE access_code = ?").bind(discord_query.player_id).bind(state).execute(&mut *db).await else {
+    let Ok(query) = query(r#"UPDATE authentication_requests SET approved = 1, internal_user_id = ?, authentication_method = "discord" WHERE access_code = ?"#).bind(discord_query.player_id).bind(state).execute(&mut *db).await else {
         return String::from("An error occured interfacing with the database.")
     };
 

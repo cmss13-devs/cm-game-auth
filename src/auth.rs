@@ -1,6 +1,6 @@
 use base64::{prelude::BASE64_STANDARD_NO_PAD, Engine};
 use rand::{distr::Alphanumeric, Rng};
-use rocket::{response::Redirect, State};
+use rocket::{response::{content::RawHtml, Redirect}, State};
 use rocket_db_pools::Connection;
 use serde::Deserialize;
 use sqlx::{prelude::FromRow, query, query_as};
@@ -59,6 +59,13 @@ struct OAuthUser {
     rat: Option<i32>,
 }
 
+pub fn get_response_html(response_message: &str) -> RawHtml<String> {
+    let pre_text = "<!doctypehtml><style>.main{background-image:none;background:radial-gradient(rgba(0,235,78,.2),rgba(0,235,78,.04));width:100vw;height:100vh;display:flex;flex-direction:column;justify-content:center;font-size:18px}.main::after{content:' ';display:block;position:absolute;top:0;left:0;bottom:0;right:0;background:hsla(0,6%,7%,.1);opacity:0;z-index:2;pointer-events:none}.main::before{content:' ';display:block;position:absolute;top:0;left:0;bottom:0;right:0;background:linear-gradient(hsla(0,6%,7%,0) 50%,hsla(0,0%,0%,.25) 50%),linear-gradient(90deg,hsla(0,100%,50%,.06),hsla(120,100%,50%,.02),hsla(240,100%,50%,.06));z-index:2;background-size:100% 2px,3px 100%;pointer-events:none}body{background-color:#1a1919;margin:0;font-family:monospace;color:#fff}.text{text-align:center}</style><div class=main><div class=text>";
+    let post_text = "</div></div>";
+
+    RawHtml(pre_text.to_string() + response_message + post_text)
+}
+
 #[get("/callback?<code>&<scope>&<state>")]
 #[allow(unused_variables)]
 pub async fn forums_callback(
@@ -67,11 +74,11 @@ pub async fn forums_callback(
     scope: &str,
     state: &str,
     config: &State<Config>,
-) -> String {
+) -> RawHtml<String> {
     let oauth_config = config.forums.as_ref().unwrap();
 
     if !state.chars().all(char::is_alphanumeric) {
-        return String::from("Invalid token.");
+        return get_response_html("Invalid token.");
     };
 
     let http_client = reqwest::Client::new();
@@ -92,27 +99,27 @@ pub async fn forums_callback(
         .await;
 
     let Ok(response) = result else {
-        return String::from("No response provided from authentication server.");
+        return get_response_html("No response provided from authentication server.");
     };
 
     let Ok(json) = response.json::<OAuthResponse>().await else {
-        return String::from("Unable to parse response");
+        return get_response_html("Unable to parse response");
     };
 
     let user = match get_user_from_jwt(&json.id_token) {
         Ok(user) => user,
-        Err(error) => return error,
+        Err(error) => return get_response_html(&error.to_string()),
     };
 
     let Ok(query) = query(r#"UPDATE authentication_requests SET approved = 1, external_username = ?, authentication_method = "forums" WHERE access_code = ?"#).bind(user.sub).bind(state).execute(&mut **db).await else {
-        return String::from("An error occured interfacing with the database.")
+        return get_response_html("An error occured interfacing with the database.")
     };
 
     if query.rows_affected() == 0 {
-        return String::from("Your authentication request could not be found. Please try again.");
+        return get_response_html("Your authentication request could not be found. Please try again.");
     };
 
-    String::from("Your authentication request has been approved. You can now return to the game.")
+    get_response_html("Your authentication request has been approved. You can now return to the game.")
 }
 
 #[derive(FromRow)]
@@ -127,11 +134,11 @@ pub async fn discord_callback(
     code: &str,
     state: &str,
     config: &State<Config>,
-) -> String {
+) -> RawHtml<String> {
     let oauth_config = config.discord.as_ref().unwrap();
 
     if !state.chars().all(char::is_alphanumeric) {
-        return String::from("Invalid token.");
+        return get_response_html("Invalid token.");
     };
 
     let http_client = reqwest::Client::new();
@@ -151,34 +158,34 @@ pub async fn discord_callback(
         .await;
 
     let Ok(response) = result else {
-        return String::from("No response provided from authentication server.");
+        return get_response_html("No response provided from authentication server.");
     };
 
     let json = match response.json::<OAuthResponse>().await {
         Ok(json) => json,
-        Err(error) => return format!("Unable to parse response: {}", error),
+        Err(error) => return get_response_html(format!("Unable to parse response: {}", error).as_str()),
     };
 
     let user = match get_user_from_jwt(&json.id_token) {
         Ok(user) => user,
-        Err(error) => return error,
+        Err(error) => return get_response_html(&error.to_string()),
     };
 
     let db = &mut **db;
 
     let Ok(discord_query): Result<DiscordLink, sqlx::Error> = query_as("SELECT player_id FROM discord_links WHERE discord_id = ?").bind(&user.sub).fetch_one(&mut *db).await else {
-        return String::from("In order to use Discord authentication, you must have previously linked your CKEY in game.")
+        return get_response_html("In order to use Discord authentication, you must have previously linked your CKEY in game.")
     };
 
     let Ok(query) = query(r#"UPDATE authentication_requests SET approved = 1, internal_user_id = ?, authentication_method = "discord" WHERE access_code = ?"#).bind(discord_query.player_id).bind(state).execute(&mut *db).await else {
-        return String::from("An error occured interfacing with the database.")
+        return get_response_html("An error occured interfacing with the database.")
     };
 
     if query.rows_affected() == 0 {
-        return String::from("Your authentication request could not be found. Please try again.");
+        return get_response_html("Your authentication request could not be found. Please try again.");
     };
 
-    String::from("Your authentication request has been approved. You can now return to the game.")
+    get_response_html("Your authentication request has been approved. You can now return to the game.")
 }
 
 fn get_user_from_jwt(jwt: &str) -> Result<OAuthUser, String> {

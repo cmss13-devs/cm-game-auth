@@ -159,6 +159,7 @@ pub fn get_response_html(response_message: &str) -> RawHtml<String> {
 
             .text {
                 text-align: center;
+                font-size: 18px;
             }
         </style>
     </head>

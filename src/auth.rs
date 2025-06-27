@@ -5,7 +5,7 @@ use rocket_db_pools::Connection;
 use serde::Deserialize;
 use sqlx::{prelude::FromRow, query, query_as};
 
-use crate::{Cmdb, Config};
+use crate::{get_response_html, Cmdb, Config};
 
 #[get("/authenticate?<code>")]
 pub async fn forums_authenticate(code: &str, config: &State<Config>) -> Redirect {
@@ -57,13 +57,6 @@ struct OAuthUser {
     nonce: Option<String>,
     picture: Option<String>,
     rat: Option<i32>,
-}
-
-pub fn get_response_html(response_message: &str) -> RawHtml<String> {
-    let pre_text = "<!doctypehtml><style>.main{background-image:none;background:radial-gradient(rgba(0,235,78,.2),rgba(0,235,78,.04));width:100vw;height:100vh;display:flex;flex-direction:column;justify-content:center;font-size:18px}.main::after{content:' ';display:block;position:absolute;top:0;left:0;bottom:0;right:0;background:hsla(0,6%,7%,.1);opacity:0;z-index:2;pointer-events:none}.main::before{content:' ';display:block;position:absolute;top:0;left:0;bottom:0;right:0;background:linear-gradient(hsla(0,6%,7%,0) 50%,hsla(0,0%,0%,.25) 50%),linear-gradient(90deg,hsla(0,100%,50%,.06),hsla(120,100%,50%,.02),hsla(240,100%,50%,.06));z-index:2;background-size:100% 2px,3px 100%;pointer-events:none}body{background-color:#1a1919;margin:0;font-family:monospace;color:#fff}.text{text-align:center}</style><div class=main><div class=text>";
-    let post_text = "</div></div>";
-
-    RawHtml(pre_text.to_string() + response_message + post_text)
 }
 
 #[get("/callback?<code>&<scope>&<state>")]

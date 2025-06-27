@@ -2,7 +2,8 @@
 
 use rocket::fairing::{Fairing, Info, Kind};
 use rocket::figment::value::Value;
-use rocket::http::Header;
+use rocket::http::{Header, Status};
+use rocket::response::content::RawHtml;
 use rocket::{
     fairing::AdHoc,
     figment::{
@@ -95,4 +96,86 @@ fn rocket() -> _ {
             format!("{}/discord", base_url),
             routes![auth::discord_authenticate, auth::discord_callback],
         )
+        .register("/", catchers![default])
+}
+
+pub fn get_response_html(response_message: &str) -> RawHtml<String> {
+    RawHtml(
+    "<!DOCTYPE html>
+    <html>
+
+    <head>
+        <style>
+            .main {
+                background-image: none;
+                background: radial-gradient(rgba(0, 235, 78, 0.2),
+                        rgba(0, 235, 78, 0.04));
+                width: 100vw;
+                height: 100vh;
+                display: flex;
+                flex-direction: column;
+                justify-content: center;
+            }
+
+            .main::after {
+                content: ' ';
+                display: block;
+                position: absolute;
+                top: 0;
+                left: 0;
+                bottom: 0;
+                right: 0;
+                background: hsla(0, 6%, 7%, 0.1);
+                opacity: 0;
+                z-index: 2;
+                pointer-events: none;
+            }
+
+            .main::before {
+                content: ' ';
+                display: block;
+                position: absolute;
+                top: 0;
+                left: 0;
+                bottom: 0;
+                right: 0;
+                background: linear-gradient(hsla(0, 6%, 7%, 0) 50%,
+                        hsla(0, 0%, 0%, 0.25) 50%),
+                    linear-gradient(90deg,
+                        hsla(0, 100%, 50%, 0.06),
+                        hsla(120, 100%, 50%, 0.02),
+                        hsla(240, 100%, 50%, 0.06));
+                z-index: 2;
+                background-size: 100% 2px, 3px 100%;
+                pointer-events: none;
+            }
+
+            body {
+                background-color: #1a1919;
+                margin: 0px;
+                font-family: monospace;
+                color: white;
+            }
+
+            .text {
+                text-align: center;
+            }
+        </style>
+    </head>
+
+    <body>
+        <div class='main'><div class='text'>(%PLACEHOLDER$)</div></div>
+    </body>
+
+    </html>
+    ".replace("(%PLACEHOLDER$)", response_message))
+}
+
+#[catch(default)]
+fn default(status: Status, _req: &Request) -> RawHtml<String> {
+    if let Some(reason) = status.reason() {
+        return get_response_html(format!("{}: {}", status.code, reason).as_str())
+    }
+
+    get_response_html(format!("{}", status.code).as_str())
 }

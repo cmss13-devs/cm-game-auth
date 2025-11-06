@@ -35,7 +35,7 @@ pub async fn twitch_authenticate(code: &str, config: &State<Config>) -> Redirect
     let oauth_config = config.twitch.as_ref().unwrap();
 
     Redirect::found(format!(
-        "https://id.twitch.tv/oauth2/authorize?client_id={}&redirect_uri={}/twitch/callback&scope=openid+identify&response_type=code&state={}", oauth_config.client_id, &config.base_url, code
+        "https://id.twitch.tv/oauth2/authorize?client_id={}&redirect_uri={}/twitch/callback&scope=openid&response_type=code&state={}", oauth_config.client_id, &config.base_url, code
     ))
 }
 
@@ -45,27 +45,18 @@ struct OAuthResponse {
     access_token: String,
     expires_in: i32,
     id_token: String,
-    scope: Scopes,
     token_type: String,
     refresh_token: Option<String>,
-}
-
-#[derive(Deserialize)]
-#[allow(dead_code)]
-enum Scopes {
-    AsString(String),
-    AsVec(Vec<String>),
 }
 
 #[derive(Deserialize, Debug)]
 #[allow(dead_code)]
 struct OAuthUser {
     iss: String,
-    aud: Vec<String>,
     iat: i32,
     exp: i32,
-    auth_time: i32,
-    at_hash: String,
+    auth_time: Option<i32>,
+    at_hash: Option<String>,
     sub: String,
 
     email: Option<String>,

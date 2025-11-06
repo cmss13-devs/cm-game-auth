@@ -1,6 +1,9 @@
 use base64::{prelude::BASE64_STANDARD_NO_PAD, Engine};
 use rand::{distr::Alphanumeric, Rng};
-use rocket::{response::{content::RawHtml, Redirect}, State};
+use rocket::{
+    response::{content::RawHtml, Redirect},
+    State,
+};
 use rocket_db_pools::Connection;
 use serde::Deserialize;
 use sqlx::{prelude::FromRow, query, query_as};
@@ -27,15 +30,31 @@ pub async fn discord_authenticate(code: &str, config: &State<Config>) -> Redirec
     Redirect::found(format!("https://discord.com/oauth2/authorize?scope=openid+identify&response_type=code&client_id={}&redirect_uri={}/discord/callback&state={}", &oauth_config.client_id, &config.base_url, code))
 }
 
+#[get("/authenticate?<code>")]
+pub async fn twitch_authenticate(code: &str, config: &State<Config>) -> Redirect {
+    let oauth_config = config.twitch.as_ref().unwrap();
+
+    Redirect::found(format!(
+        "https://id.twitch.tv/oauth2/authorize?client_id={}&redirect_uri={}/twitch/callback&scope=openid+identify&response_type=code&state={}", oauth_config.client_id, &config.base_url, code
+    ))
+}
+
 #[derive(Deserialize)]
 #[allow(dead_code)]
 struct OAuthResponse {
     access_token: String,
     expires_in: i32,
     id_token: String,
-    scope: String,
+    scope: Scopes,
     token_type: String,
-    refresh_token: Option<String>
+    refresh_token: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[allow(dead_code)]
+enum Scopes {
+    AsString(String),
+    AsVec(Vec<String>),
 }
 
 #[derive(Deserialize, Debug)]
@@ -109,10 +128,14 @@ pub async fn forums_callback(
     };
 
     if query.rows_affected() == 0 {
-        return get_response_html("Your authentication request could not be found. Please try again.");
+        return get_response_html(
+            "Your authentication request could not be found. Please try again.",
+        );
     };
 
-    get_response_html("Your authentication request has been approved. You can now return to the game.")
+    get_response_html(
+        "Your authentication request has been approved. You can now return to the game.",
+    )
 }
 
 #[derive(FromRow)]
@@ -156,7 +179,9 @@ pub async fn discord_callback(
 
     let json = match response.json::<OAuthResponse>().await {
         Ok(json) => json,
-        Err(error) => return get_response_html(format!("Unable to parse response: {}", error).as_str()),
+        Err(error) => {
+            return get_response_html(format!("Unable to parse response: {}", error).as_str())
+        }
     };
 
     let user = match get_user_from_jwt(&json.id_token) {
@@ -166,8 +191,13 @@ pub async fn discord_callback(
 
     let db = &mut **db;
 
-    let Ok(discord_query): Result<DiscordLink, sqlx::Error> = query_as("SELECT player_id FROM discord_links WHERE discord_id = ?").bind(&user.sub).fetch_one(&mut *db).await else {
-        return get_response_html("In order to use Discord authentication, you must have previously linked your CKEY in game.")
+    let Ok(discord_query): Result<DiscordLink, sqlx::Error> =
+        query_as("SELECT player_id FROM discord_links WHERE discord_id = ?")
+            .bind(&user.sub)
+            .fetch_one(&mut *db)
+            .await
+    else {
+        return get_response_html("In order to use Discord authentication, you must have previously linked your CKEY in game.");
     };
 
     let Ok(query) = query(r#"UPDATE authentication_requests SET approved = 1, internal_user_id = ?, authentication_method = "discord" WHERE access_code = ?"#).bind(discord_query.player_id).bind(state).execute(&mut *db).await else {
@@ -175,10 +205,83 @@ pub async fn discord_callback(
     };
 
     if query.rows_affected() == 0 {
-        return get_response_html("Your authentication request could not be found. Please try again.");
+        return get_response_html(
+            "Your authentication request could not be found. Please try again.",
+        );
     };
 
-    get_response_html("Your authentication request has been approved. You can now return to the game.")
+    get_response_html(
+        "Your authentication request has been approved. You can now return to the game.",
+    )
+}
+
+#[get("/callback?<code>&<scope>&<state>")]
+#[allow(unused_variables)]
+pub async fn twitch_callback(
+    mut db: Connection<Cmdb>,
+    code: &str,
+    state: &str,
+    scope: &str,
+    config: &State<Config>,
+) -> RawHtml<String> {
+    let oauth_config = config.twitch.as_ref().unwrap();
+
+    if !state.chars().all(char::is_alphanumeric) {
+        return get_response_html("Invalid token.");
+    };
+
+    let http_client = reqwest::Client::new();
+
+    let result = http_client
+        .post("https://id.twitch.tv/oauth2/token")
+        .form(&[
+            ("client_id", &oauth_config.client_id),
+            ("client_secret", &oauth_config.client_secret),
+            ("grant_type", &String::from("authorization_code")),
+            ("code", &code.to_string()),
+            (
+                "redirect_uri",
+                &format!("{}/twitch/callback", &config.base_url),
+            ),
+        ])
+        .send()
+        .await;
+
+    let Ok(response) = result else {
+        return get_response_html("No response provided from authentication server.");
+    };
+
+    let Ok(json) = response.json::<OAuthResponse>().await else {
+        return get_response_html("Unable to parse response");
+    };
+
+    let user = match get_user_from_jwt(&json.id_token) {
+        Ok(user) => user,
+        Err(error) => return get_response_html(&error.to_string()),
+    };
+
+    if let Ok(query) = query(r#"SELECT * from twitch_link WHERE twitch_id = ?"#)
+        .bind(&user.sub)
+        .fetch_one(&mut **db)
+        .await
+    {
+        return get_response_html("You have already linked this Twitch account to a CKEY. Please contact support for help.");
+    }
+
+    let Ok(query) = query(r#"UPDATE twitch_link SET twitch_id = ? WHERE access_code = ?"#)
+        .bind(user.sub)
+        .bind(state)
+        .execute(&mut **db)
+        .await
+    else {
+        return get_response_html("An error occured interfacing with the database.");
+    };
+
+    if query.rows_affected() == 0 {
+        return get_response_html("Your link request could not be found. Please try again.");
+    };
+
+    get_response_html("Your Twitch account has been linked to the game.")
 }
 
 fn get_user_from_jwt(jwt: &str) -> Result<OAuthUser, String> {

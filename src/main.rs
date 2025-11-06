@@ -57,12 +57,19 @@ struct DiscordOAuthConfig {
 }
 
 #[derive(Debug, Deserialize, Serialize)]
+struct TwitchOAuthConfig {
+    client_id: String,
+    client_secret: String,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(crate = "rocket::serde")]
 #[derive(Default)]
 struct Config {
     forums: Option<ForumsOAuthConfig>,
     discord: Option<DiscordOAuthConfig>,
-    base_url: String
+    twitch: Option<TwitchOAuthConfig>,
+    base_url: String,
 }
 
 #[derive(Database)]
@@ -96,12 +103,16 @@ fn rocket() -> _ {
             format!("{}/discord", base_url),
             routes![auth::discord_authenticate, auth::discord_callback],
         )
+        .mount(
+            format!("{}/twitch", base_url),
+            routes![auth::twitch_authenticate, auth::twitch_callback],
+        )
         .register("/", catchers![default])
 }
 
 pub fn get_response_html(response_message: &str) -> RawHtml<String> {
     RawHtml(
-    "<!DOCTYPE html>
+        "<!DOCTYPE html>
     <html>
 
     <head>
@@ -169,13 +180,15 @@ pub fn get_response_html(response_message: &str) -> RawHtml<String> {
     </body>
 
     </html>
-    ".replace("(%PLACEHOLDER$)", response_message))
+    "
+        .replace("(%PLACEHOLDER$)", response_message),
+    )
 }
 
 #[catch(default)]
 fn default(status: Status, _req: &Request) -> RawHtml<String> {
     if let Some(reason) = status.reason() {
-        return get_response_html(format!("{}: {}", status.code, reason).as_str())
+        return get_response_html(format!("{}: {}", status.code, reason).as_str());
     }
 
     get_response_html(format!("{}", status.code).as_str())
